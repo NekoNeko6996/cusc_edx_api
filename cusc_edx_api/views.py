@@ -8,6 +8,9 @@ from django.shortcuts import get_object_or_404
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
+from opaque_keys import InvalidKeyError
+from common.djangoapps.course_modes.models import CourseMode
+
 from opaque_keys.edx.keys import CourseKey
 from common.djangoapps.student.models import CourseEnrollment
 
@@ -266,5 +269,84 @@ def user_lookup(request):
         {
             "count": len(users),
             "results": users,
+        }
+    )
+    
+@require_GET
+def course_pricing(request, course_id):
+    """
+    GET /api/cusc-edx-api/course-pricing/?course_id=...&mode=verified
+
+    - Bắt buộc: course_id (vd: course-v1:ORG+CODE+RUN)
+    - Optional: mode (vd: verified, audit,...)
+      Nếu không truyền mode => trả về tất cả course modes của course đó.
+    """
+    # bảo vệ bằng token giống các API khác
+    auth_error = _check_node_auth(request)
+    if auth_error is not None:
+        return auth_error
+
+    course_id_str = course_id
+    if not course_id_str:
+        return JsonResponse(
+            {"error": "Missing course_id"},
+            status=400,
+        )
+
+    mode_slug = request.GET.get("mode")  # ví dụ: verified
+
+    # parse course_id -> CourseKey
+    try:
+        course_key = CourseKey.from_string(course_id_str)
+    except InvalidKeyError:
+        return JsonResponse(
+            {"error": f"Invalid course_id '{course_id_str}'"},
+            status=400,
+        )
+
+    qs = CourseMode.objects.filter(course_id=course_key)
+
+    if mode_slug:
+        qs = qs.filter(mode_slug=mode_slug)
+
+    if not qs.exists():
+        return JsonResponse(
+            {"error": "Không tìm thấy pricing cho course này"},
+            status=404,
+        )
+
+    modes_data = []
+    for m in qs:
+        modes_data.append(
+            {
+                "mode_slug": getattr(m, "mode_slug", None),
+                "mode_display_name": getattr(m, "mode_display_name", None),
+                "currency": getattr(m, "currency", None),
+                # Decimal -> string để JSON không lỗi
+                "price": (
+                    str(getattr(m, "min_price", None))
+                    if getattr(m, "min_price", None) is not None
+                    else None
+                ),
+                "sku": getattr(m, "sku", None),
+                "bulk_sku": getattr(m, "bulk_sku", None),
+                "expiration_datetime": (
+                    m.expiration_datetime.isoformat()
+                    if getattr(m, "expiration_datetime", None)
+                    else None
+                ),
+                "expiration_date": (
+                    m.expiration_date.isoformat()
+                    if getattr(m, "expiration_date", None)
+                    else None
+                ),
+                "is_active": getattr(m, "is_active", None),
+            }
+        )
+
+    return JsonResponse(
+        {
+            "course_id": course_id_str,
+            "modes": modes_data,
         }
     )

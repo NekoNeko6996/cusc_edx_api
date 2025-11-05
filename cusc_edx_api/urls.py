@@ -16,4 +16,7 @@ urlpatterns = [
     
     # lookup user
     path("users/lookup/", views.user_lookup, name="user-lookup"),
+    
+    # endpoint lấy pricing theo course_id
+    path("course-pricing/<path:course_id>/", views.course_pricing, name="course_pricing"),
 ]
