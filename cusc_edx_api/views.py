@@ -26,7 +26,6 @@ def ping(request):
 # ==== (optional) bảo vệ endpoint bằng header secret đơn giản ==== #
 PAYMENT_API_TOKEN = getattr(settings, "CUSC_PAYMENT_API_TOKEN", None)
 
-
 def _check_node_auth(request):
     """
     Kiểu bảo vệ tối thiểu:
@@ -34,8 +33,6 @@ def _check_node_auth(request):
     - Node.js gửi header: X-CUSC-PAYMENT-TOKEN: <token>
     Nếu chưa set token thì coi như tắt auth (DEV).
     """
-    if not PAYMENT_API_TOKEN:
-        return None  # auth off (dev)
     token = request.headers.get("X-CUSC-PAYMENT-TOKEN")
     if token != PAYMENT_API_TOKEN:
         return JsonResponse({"error": "Unauthorized"}, status=401)
